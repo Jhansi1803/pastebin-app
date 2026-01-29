@@ -1,41 +1,64 @@
-import { prisma } from "@/app/lib/prisma";
+import { NextRequest, NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
 
+const prisma = new PrismaClient();
+
+/**
+ * GET /api/paste/[id]
+ * Fetch a paste by ID
+ */
 export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const paste = await prisma.paste.findUnique({
-    where: { id: params.id },
-  });
+  try {
+    const { id } = await params;
 
-  if (!paste) {
-    return new Response(
-      JSON.stringify({ error: "Paste not found" }),
-      { status: 404 }
+    const paste = await prisma.paste.findUnique({
+      where: { id },
+    });
+
+    if (!paste) {
+      return NextResponse.json(
+        { error: "Paste not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(paste, { status: 200 });
+  } catch (error) {
+    console.error("GET paste error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
     );
   }
+}
 
-  // ⏰ Expiry by time
-  if (paste.expiresAt && paste.expiresAt < new Date()) {
-    return new Response(
-      JSON.stringify({ error: "Paste expired" }),
-      { status: 410 }
+/**
+ * DELETE /api/paste/[id]
+ * Delete a paste by ID
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    await prisma.paste.delete({
+      where: { id },
+    });
+
+    return NextResponse.json(
+      { message: "Paste deleted successfully" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("DELETE paste error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete paste" },
+      { status: 500 }
     );
   }
-
-  // 👀 Expiry by views
-  if (paste.maxViews && paste.views >= paste.maxViews) {
-    return new Response(
-      JSON.stringify({ error: "Paste expired" }),
-      { status: 410 }
-    );
-  }
-
-  // Increment view count
-  await prisma.paste.update({
-    where: { id: paste.id },
-    data: { views: { increment: 1 } },
-  });
-
-  return Response.json(paste);
 }
